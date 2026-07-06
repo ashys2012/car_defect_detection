@@ -66,7 +66,7 @@ Per class (worst to best), from `evaluate.py`:
 | tire_flat | 0.884 | 0.836 |
 | glass_shatter | 0.988 | 0.927 |
 
-crack is clearly the weak point, and it's not a mystery why: it's the rarest class in training (651 instances vs 2560 for scratch) and visually it's a thin, low-contrast line that's easy to confuse with glare or a reflection on a phone photo. A nano model with no special handling for this isn't going to be great at it, and that's fine — the brief is explicit that raw mAP isn't the thing being graded here, the process is. Plots and the full per-epoch curve are in `results/`.
+crack is clearly the weak point as it's the rarest class in training (651 instances vs 2560 for scratch) and visually it's a thin, low-contrast line that's easy to confuse with glare or a reflection on a phone photo.
 
 ## Active Learning Implementation
 
