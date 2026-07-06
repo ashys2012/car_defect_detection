@@ -22,6 +22,15 @@ source .venv/bin/activate
 uv pip install torch==2.4.1 torchvision==0.19.1 --extra-index-url https://download.pytorch.org/whl/cu121
 uv pip install -r requirements.txt
 python download_data.py   # needs a Kaggle API token - see the docstring
+
+# 1. baseline: fine-tune yolo11n.pt on the full training set (~20 min on a single GPU)
+python train_baseline.py --epochs 100
+
+# 2. per-class breakdown of that checkpoint, worst class first
+python evaluate.py --weights runs/detect/cardd_baseline/weights/best.pt
+
+# 3. active vs random selection experiment (~15-20 min: three training runs + pool scoring)
+python run_active_learning_experiment.py --seed-frac 0.15 --budget-frac 0.15 --epochs 40
 ```
 
 ## Dataset
