@@ -1,0 +1,11 @@
+# Install torch/torchvision matching your local CUDA driver first, e.g. for
+# CUDA 12.1-compatible drivers (check with `nvidia-smi`):
+#   pip install torch==2.4.1 torchvision==0.19.1 --extra-index-url https://download.pytorch.org/whl/cu121
+# Then:
+#   pip install -r requirements.txt
+ultralytics==8.4.89
+baal==2.1.0
+kagglehub==1.0.2
+numpy==2.2.6
+opencv-python==5.0.0.93
+pillow==12.3.0

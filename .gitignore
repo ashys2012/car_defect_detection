@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Datasets (large, regenerable via download_data.py)
+cardd_detector/data/
+vehicle_damage_poc/data/
+vehicle_damage_poc
+data/
+data
+runs/
+runs
+al_splits
+
+# Model weights and training runs (large, regenerable by rerunning the scripts;
+# small evidence files are copied into cardd_detector/results/ instead)
+*.pt
+cardd_detector/runs/
+cardd_detector/al_splits/
+
+# Raw logs (large; cleaned copies live in cardd_detector/results/)
+*.log
+
+# Kaggle credentials, just in case one ever ends up in-tree
+kaggle.json
+access_token
+
