@@ -1,14 +1,10 @@
 # CarDD damage detector + active learning check
 
-Part B of the exercise: one narrow component (a YOLOv11 damage detector) built against a public dataset, with an actual train/val/test discipline, plus a working test of whether the active-learning idea from the design doc holds up in practice.
-
-Related pieces in the parent folder:
-- `../Efestos_hub.pdf` – the design document (Part A)
+ YOLOv11 damage detector built against a public dataset, with an actual train/val/test discipline, plus a working test of whether the active-learning idea from the design doc holds up in practice.
 
 ## Layout
 
 ```
-data/cardd.yaml                     dataset config
 download_data.py                    pulls CarDD via kagglehub, copies it locally
 train_baseline.py                   fine-tunes yolo11n.pt on CarDD
 evaluate.py                         per-class test report, worst class first
