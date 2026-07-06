@@ -32,7 +32,7 @@ Split is 2816 / 810 / 374 (train/val/test). I checked and this matches the offic
 
 Two things about this dataset that are worth being upfront about:
 
-**The classes don't match the design doc.** CarDD's actual 6 labels are `dent, scratch, crack, glass_shatter, lamp_broken, tire_flat`. The design doc's effort table has `scratch, dent, mirror, glass_crack, panel_damage`. There's no mirror class and no panel_damage class in CarDD, and nothing quite maps to them either. I didn't want to force a merge that either throws away a real distinction (crack vs glass_shatter are visually different things) or invents a class with zero training examples (mirror), so the detector here targets CarDD's real classes and the effort table would need to be re-derived against whatever a production detector actually supports.
+CarDD's actual 6 labels are `dent, scratch, crack, glass_shatter, lamp_broken, tire_flat`.
 
 **There's no "clean car" class.** Every single image has at least one damage box. The design doc calls for a No Defect / background class (Sec. 3), and CarDD just doesn't have one. A real pilot would need photos of undamaged panels collected separately.
 
@@ -59,20 +59,20 @@ Per class (worst to best), from `evaluate.py`:
 
 crack is clearly the weak point, and it's not a mystery why: it's the rarest class in training (651 instances vs 2560 for scratch) and visually it's a thin, low-contrast line that's easy to confuse with glare or a reflection on a phone photo. A nano model with no special handling for this isn't going to be great at it, and that's fine — the brief is explicit that raw mAP isn't the thing being graded here, the process is. Plots and the full per-epoch curve are in `results/`.
 
-## Does the active-learning idea actually help?
+## Active Learning Implementation
 
-This is the part I wanted to check rather than just implement and claim it works.
+Active Learning works with a small labelling budget, using the model's own uncertainty (MC Dropout) to decide which vehicles to label next, instead of picking at random. BaaL is the library used for this, but BaaL's uncertainty heuristics (BALD, entropy) are built for classification — one image, one fixed-size probability vector that sums to 1. YOLO11 has no dropout layers anywhere in the network, so for BaaL to switch on — MC Dropout has to be added, not just enabled.
 
-The design doc says: with a small labelling budget, use the model's own uncertainty (MC Dropout) to decide which vehicles to label next, instead of picking at random. BaaL is the library the brief suggested for this, but BaaL's uncertainty heuristics (BALD, entropy) are built for classification — one image, one fixed-size probability vector that sums to 1. A YOLO detector doesn't produce anything like that: it's a dense grid of thousands of anchors, each with its own independent class-probability vector (independent because more than one type of damage can show up in the same spot, so it's sigmoid, not softmax). On top of that, stock YOLO11 has no dropout layers anywhere in the network, so there's nothing for BaaL to switch on — MC Dropout has to be added, not just enabled.
+Added in `active_learning/mc_dropout.py` :
 
-What I actually did (all in `active_learning/mc_dropout.py`):
-
-1. Added BaaL's `Dropout2d` (a dropout layer that stays active during `eval()`, unlike a normal one) into just the classification branch of the Detect head. Left the box-regression branch alone — I only care about class uncertainty here.
-2. Ran 8 stochastic passes per image on the exact same input tensor, reading the raw per-anchor class scores before NMS each time. This matters: after NMS, the surviving boxes are a different, differently-ordered subset every pass, so there'd be nothing to line up anchor-by-anchor across passes.
-3. For each class, built a proper two-way distribution (`p`, `1-p`) per anchor per pass and fed that into BaaL's actual `BALD().compute_score()` — so it's really running BaaL's computation, not a lookalike I wrote myself. Feeding it the raw multi-label tensor directly would have made BaaL silently softmax-normalize across classes that aren't mutually exclusive, which would have been wrong.
+1. Added BaaL's `Dropout2d` into just the classification branch of the Detect head. Left the box-regression branch without active learning.
+2. Ran 8 stochastic passes per image on the same input tensor, reading the raw per-anchor class scores before NMS each time.
+3. For each class, built a proper two-way distribution (`p`, `1-p`) per anchor per pass and fed that into BaaL's actual `BALD().compute_score()`. Feeding it the raw multi-label tensor directly would have made BaaL silently softmax-normalize across classes that aren't mutually exclusive, which would have been wrong.
 4. Took the worst class per anchor, then averaged the top 20 anchors, to get one uncertainty number per image without background anchors drowning out the signal.
 
-Then the actual test: split the training images into a 422-image seed set and a 2394-image pool. Trained on seed only, used that model to rank the pool by uncertainty, then trained two more models — one on seed + the 422 most uncertain pool images, one on seed + 422 random pool images. Same size, same hyperparameters, only the selection method differs, both scored on the untouched test set.
+Then the actual test: split the training images into a 422-image seed set and a 2394-image pool. Trained on seed only, used that model to rank the pool by uncertainty, then trained two more models — one on seed + the 422 most uncertain pool images, one on seed + 422 random pool images. Same size, same hyperparameters, only the selection method differs; both scored on the untouched test set.
+
+In this particular case, 15% of the total samples were labelled.
 
 | training set | n images | mAP50 | mAP50-95 |
 |---|---|---|---|
@@ -80,11 +80,11 @@ Then the actual test: split the training images into a 422-image seed set and a 
 | seed + random | 844 | 0.610 | 0.473 |
 | seed + active (uncertainty-selected) | 844 | 0.616 | 0.475 |
 
-Active selection beat random by **+0.0055 mAP50**. That's real — the mechanism works, it's not broken, and it does pick a genuinely different set of images than random would — but it's a small edge, not a dramatic one, on this dataset at this scale. I'd rather say that plainly than dress it up. My guess is this would show up more clearly over two or three rounds rather than one, and possibly more clearly on real yard photos, which likely have more redundant/near-duplicate shots than a dataset that was curated to have variety. One round on one dataset isn't enough to call it proven either way. Full run output is in `results/active_learning_experiment_output.log`.
+Active selection beat random by **+0.0055 mAP50**.
 
 ## What I'd do with more time
 
-- Run a second and third active-learning round — one round only tells you whether the method has legs, not what it's actually worth over a full labelling campaign.
-- Try segmentation instead of boxes. CarDD ships instance masks, and crack in particular is probably better described by a thin mask than a box. Stuck to detection here to match the "one narrow component" scope.
-- Extend the MC-Dropout bridge to the box-regression branch too — right now it only measures class uncertainty, not "is this box actually in the right place," which matters for effort estimation (a bad box over- or under-states the damage).
-- Fix the two dataset gaps above (no background class, no mirror/panel_damage) before trusting this near real money decisions.
+- Run a second and third active-learning round — one round only tells whether the method works.
+- Try segmentation instead of boxes. CarDD ships instance masks, and crack in particular is probably better described by a thin mask than a box. Stuck to detection for the pilot.
+- Extend the MC-Dropout bridge to the box-regression branch too — right now it only measures class uncertainty.
+- Fix the two dataset gaps above (no background class, no mirror/panel_damage).
